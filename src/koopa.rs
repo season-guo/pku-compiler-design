@@ -1,5 +1,6 @@
 use koopa::ir::{
-    FunctionData, Program, Type, builder::{BasicBlockBuilder, BlockBuilder, LocalInstBuilder, ValueBuilder},
+    Program, Type,
+    builder::{BasicBlockBuilder, LocalInstBuilder, ValueBuilder},
 };
 
 use crate::ast::*;
