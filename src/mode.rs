@@ -18,7 +18,7 @@ impl From<String> for Mode {
 }
 
 impl Mode {
-    pub fn handle(self: &Self, program: Program, output: Option<String>) {
+    pub fn handle(self: &Self, program: &Program, output: Option<String>) {
         if let Some(output) = output {
             let file = std::fs::File::create(output).unwrap();
             self.write(program, file); 
@@ -27,9 +27,9 @@ impl Mode {
         }
     }
 
-    pub fn write(self: &Self, program: Program, writer: impl Write) {
+    pub fn write(self: &Self, program: &Program, writer: impl Write) {
         match self {
-            Mode::RiscV => crate::risc::risc::koopa_to_risc(&program, writer),
+            Mode::RiscV => crate::risc::risc::RiscVGenerator::new(program).koopa_to_risc(writer),
             Mode::Koopa => KoopaGenerator::new(writer).generate_on(&program).unwrap(),
         }
     }

@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
     let program = crate::koopa::koopa::build_program_from_compunit(ast);
     let mode : Mode = mode.into();
-    mode.handle(program, output); 
+    mode.handle(&program, output); 
 
     Ok(())
 }

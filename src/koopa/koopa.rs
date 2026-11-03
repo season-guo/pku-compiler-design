@@ -1,5 +1,5 @@
-use koopa::ir::{BasicBlock, BinaryOp, FunctionData, Program, Value, builder::{BasicBlockBuilder, LocalInstBuilder, ValueBuilder}};
-use crate::ast::{aexp::{AExp, UnAryOp}, func::CompUnit};
+use koopa::ir::{BasicBlock, BinaryOp::self, FunctionData, Program, Value, builder::{BasicBlockBuilder, LocalInstBuilder, ValueBuilder}};
+use crate::ast::{aexp::{AExp, ABinaryOp, UnAryOp}, func::CompUnit};
 use crate::{new_bb, new_value, add_bb, add_value};
 
 pub fn aexp_to_koopa_insts(function_data: &mut FunctionData, block: &BasicBlock, aexp: AExp) -> Value {
@@ -8,7 +8,7 @@ pub fn aexp_to_koopa_insts(function_data: &mut FunctionData, block: &BasicBlock,
         AExp::AUnAry(op, aexp) => {
             let pre_value= aexp_to_koopa_insts(function_data, block, *aexp);
             match op {
-                UnAryOp::APlus => pre_value,
+                UnAryOp::Plus => pre_value,
                 UnAryOp::Minus => {
                     let lhs = new_value!(function_data).integer(0);
                     let val = new_value!(function_data).binary(BinaryOp::Sub, lhs, pre_value);
@@ -22,6 +22,47 @@ pub fn aexp_to_koopa_insts(function_data: &mut FunctionData, block: &BasicBlock,
                     val
                 }
             }
+        }
+        AExp::ABinary(op, lhs, rhs) => {
+            let lhs = aexp_to_koopa_insts(function_data, block, *lhs);
+            let rhs = aexp_to_koopa_insts(function_data, block, *rhs);
+            let bin_op = match op {
+                ABinaryOp::Plus => BinaryOp::Add,
+                ABinaryOp::Minus => BinaryOp::Sub,
+                ABinaryOp::Mul => BinaryOp::Mul,
+                ABinaryOp::Mod => BinaryOp::Mod,
+                ABinaryOp::Div => BinaryOp::Div,
+                ABinaryOp::And => {
+                    let zero = new_value!(function_data).integer(0);
+                    let lhs = new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero.clone());
+                    let rhs = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
+                    let _ = add_value!(function_data, *block, lhs);
+                    let _ = add_value!(function_data, *block, rhs);
+                    let expr = new_value!(function_data).binary(BinaryOp::And, lhs, rhs);
+                    let _ = add_value!(function_data, *block, expr);
+                    return expr;
+                }
+                ABinaryOp::Or => {
+                    let zero = new_value!(function_data).integer(0);
+                    let lhs = new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero.clone());
+                    let rhs = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
+                    let _ = add_value!(function_data, *block, lhs);
+                    let _ = add_value!(function_data, *block, rhs);
+                    let expr = new_value!(function_data).binary(BinaryOp::Or, lhs, rhs);
+                    let _ = add_value!(function_data, *block, expr);
+                    return expr;
+                },
+                ABinaryOp::Eq => BinaryOp::Eq,
+                ABinaryOp::Neq => BinaryOp::NotEq,
+                ABinaryOp::Lt => BinaryOp::Lt,
+                ABinaryOp::Le => BinaryOp::Le,
+                ABinaryOp::Gt => BinaryOp::Gt,
+                ABinaryOp::Ge => BinaryOp::Ge,
+            };
+
+            let expr = new_value!(function_data).binary(bin_op, lhs, rhs);
+            let _ = add_value!(function_data, *block, expr);
+            expr
         }
     }
 }
@@ -46,7 +87,8 @@ pub fn build_program_from_compunit(CompUnit { func_def }: CompUnit) -> Program {
 #[cfg(test)] 
 mod tests {
     use std::fs::read_to_string;
-    use lalrpop_util::lalrpop_mod;
+    use koopa::ir::{ValueKind};
+use lalrpop_util::lalrpop_mod;
     use crate::{koopa::koopa::build_program_from_compunit, mode::Mode};
     lalrpop_mod!(sysy);
 
@@ -62,6 +104,27 @@ mod tests {
         let input = read_to_string("test/lv3/unary.sysy").unwrap();
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let mode = Mode::Koopa;
-        mode.handle(build_program_from_compunit(ast), None);
+        mode.handle(&build_program_from_compunit(ast), None);
+    }
+
+    #[test]
+    fn koopa_binary_lrhs_value_kind() {
+        let input = read_to_string("test/lv3/unary.sysy").unwrap();
+        let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
+        let mode = Mode::Koopa;
+        let program = build_program_from_compunit(ast);
+        mode.handle(&program , None);
+        for func in program.func_layout() {
+            let funcion_data = program.func(*func);
+            for (_, node) in funcion_data.layout().bbs(){
+                for (val, _) in node.insts() {
+                    let val_data = funcion_data.dfg().value(*val);
+                    //println!("{:#?}", val_data);
+                    if let ValueKind::Binary(bin) = val_data.kind() {
+                        println!("{:#?}", funcion_data.dfg().value(bin.rhs()));
+                    }
+                }
+            }
+        }
     }
 }

@@ -31,14 +31,64 @@ Stmt: Stmt = "return" <aexp: AExp> ";" => Stmt { <> };
 
 Number: i32 = <num: IntConst> => <>;
 
-AExp: AExp = {
-  "(" <aexp: AExp> ")" => aexp,
+// 最低优先级在最外层, 每层只出现本层运算符
+AExp: AExp =  OrExp;
+
+// or and eq
+OrExp: AExp = {
+  <lhs: OrExp> "||" <rhs: AndExp> => AExp::ABinary(ABinaryOp::Or, Box::new(lhs), Box::new(rhs)),
+  <exp: AndExp> => exp,
+};
+
+
+AndExp: AExp = {
+  <lhs: AndExp> "&&" <rhs: EqExp> => AExp::ABinary(ABinaryOp::And, Box::new(lhs), Box::new(rhs)),
+  <exp: EqExp> => exp,
+};
+
+EqExp: AExp = {
+  <lhs: EqExp> "==" <rhs: RelExp> => AExp::ABinary(ABinaryOp::Eq, Box::new(lhs), Box::new(rhs)),
+  <lhs: EqExp> "!=" <rhs: RelExp> => AExp::ABinary(ABinaryOp::Neq, Box::new(lhs), Box::new(rhs)),
+  <exp: RelExp> => exp,
+};
+
+RelExp: AExp = {
+  <lhs: RelExp> "<" <rhs: AddExp> => AExp::ABinary(ABinaryOp::Lt, Box::new(lhs), Box::new(rhs)),
+  <lhs: RelExp> "<=" <rhs: AddExp> => AExp::ABinary(ABinaryOp::Le, Box::new(lhs), Box::new(rhs)),
+  <lhs: RelExp> ">" <rhs: AddExp> => AExp::ABinary(ABinaryOp::Gt, Box::new(lhs), Box::new(rhs)),
+  <lhs: RelExp> ">=" <rhs: AddExp> => AExp::ABinary(ABinaryOp::Ge, Box::new(lhs), Box::new(rhs)),
+  <exp: AddExp> => exp,
+};
+
+// + - (左结合)
+AddExp: AExp = {
+  <lhs: AddExp> "+" <rhs: MulExp> => AExp::ABinary(ABinaryOp::Plus, Box::new(lhs), Box::new(rhs)),
+  <lhs: AddExp> "-" <rhs:MulExp> => AExp::ABinary(ABinaryOp::Minus, Box::new(lhs), Box::new(rhs)),
+  <exp: MulExp> => exp,
+};
+
+// * (左结合)
+MulExp: AExp = {
+  <lhs: MulExp> "*" <rhs: UnaryExp> => AExp::ABinary(ABinaryOp::Mul, Box::new(lhs), Box::new(rhs)),
+  <lhs: MulExp> "/" <rhs: UnaryExp> => AExp::ABinary(ABinaryOp::Div, Box::new(lhs), Box::new(rhs)),
+  <lhs: MulExp> "%" <rhs: UnaryExp> => AExp::ABinary(ABinaryOp::Mod, Box::new(lhs), Box::new(rhs)),
+  <exp: UnaryExp> => exp,
+};
+
+// 一元 + - ! (右递归)
+UnaryExp: AExp = {
+  <op: UnaryOp> <exp: UnaryExp> => AExp::AUnAry(op, Box::new(exp)),
+  <exp: PrimaryExp> => exp,
+};
+
+// 括号和基本量 —— 括号里重新回到最低优先级
+PrimaryExp: AExp = {
+  "(" <exp: AExp> ")" => exp,
   <num: IntConst> => AExp::ANum(num),
-  <unary_op: UnaryOp> <aexp: AExp> => AExp::AUnAry(unary_op, Box::new(aexp)),
 };
 
 UnaryOp: UnAryOp = {
-  "+" => UnAryOp::APlus,
+  "+" => UnAryOp::Plus,
   "-" => UnAryOp::Minus,
   "!" => UnAryOp::Not,
 }
