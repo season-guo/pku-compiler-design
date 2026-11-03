@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::ast::ast::*;
 
 // lalrpop 里的约定
 grammar;

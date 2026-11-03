@@ -1,20 +1,17 @@
 use std::io::Write;
 
 use koopa::ir::{
-    Function, FunctionData, Program, Type, ValueKind, entities::ValueData, values::Integer,
+    FunctionData, Program, ValueKind, entities::ValueData,
 };
 
-pub fn koopa_to_risc(program: &Program, output: Option<String>) {
+pub fn koopa_to_risc(program: &Program, mut writer: impl Write) {
     let mut prefix: String = " .text\n .global main\n".into();
     for func in program.func_layout() {
         let func_data = program.func(*func);
         prefix += &koopa_function_to_risc(func_data);
     }
 
-    if let Some(file) = output {
-        let mut file = std::fs::File::create(file).unwrap();
-        let _ = file.write(&prefix.into_bytes());
-    }
+    let _ = writer.write(&prefix.into_bytes());
 }
 
 fn koopa_function_to_risc(function_data: &FunctionData) -> String {
@@ -40,7 +37,7 @@ fn koopa_inst_to_risc(function_data: &FunctionData, val_data: &ValueData) -> Str
                     // 这里只会是 integer, 这个递归只会走一步
                     koopa_inst_to_risc(function_data, val)
                 })
-                .unwrap_or("0".into());
+                .unwrap_or_else(|| "0".to_owned());
             format!("  li a0, {val}\n  ret")
         }
         _ => unreachable!(),

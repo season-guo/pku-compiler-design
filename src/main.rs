@@ -1,12 +1,15 @@
-use ::koopa::back::KoopaGenerator;
 use lalrpop_util::lalrpop_mod;
 use std::env::args;
 use std::fs::read_to_string;
 use std::io::Result;
 
+use crate::mode::Mode;
+
 pub mod ast;
-pub mod koopa;
 pub mod risc;
+pub mod koopa;
+pub mod mode;
+
 // 引用 lalrpop 生成的解析器
 // 因为我们刚刚创建了 sysy.lalrpop, 所以模块名是 sysy
 lalrpop_mod!(sysy);
@@ -18,7 +21,7 @@ fn main() -> Result<()> {
     let mode = args.next().unwrap();
     let input = args.next().unwrap();
     args.next();
-    let output = args.next().unwrap();
+    let output = args.next();
 
     // 读取输入文件
     let input = read_to_string(input)?;
@@ -27,15 +30,9 @@ fn main() -> Result<()> {
 
     // 调用 lalrpop 生成的 parser 解析输入文件
     let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
-    let program = koopa::build_program_from_compunit(ast);
-    match mode.as_str() {
-        "-koopa" => {
-            KoopaGenerator::new(std::fs::File::create(output)?).generate_on(&program)?
-        }
-        "-riscv" => risc::koopa_to_risc(&program, Some(output)),
-        &_ => {},
-    }
-    // 输出解析得到的 AST
-    //println!("{:#?}", ast);
+    let program = crate::koopa::koopa::build_program_from_compunit(ast);
+    let mode : Mode = mode.into();
+    mode.handle(program, output); 
+
     Ok(())
 }
