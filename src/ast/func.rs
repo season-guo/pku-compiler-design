@@ -3,10 +3,12 @@
 // FuncType  ::= "int";
 
 // Block     ::= "{" Stmt "}";
-// Stmt      ::= "return" Number ";";
+// Stmt        ::= "return" Exp ";";
 // Number    ::= INT_CONST;
 
 use koopa::ir::Type;
+
+use crate::ast::aexp::AExp;
 
 #[derive(Debug)]
 pub struct CompUnit {
@@ -32,7 +34,7 @@ pub struct Block {
 
 #[derive(Debug)]
 pub struct Stmt {
-    pub num: i32,
+    pub aexp: AExp,
 }
 
 impl From<FuncType> for Type {

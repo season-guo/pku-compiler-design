@@ -1,4 +1,4 @@
-use crate::ast::ast::*;
+use crate::ast::{func::*, aexp::*};
 
 // lalrpop 里的约定
 grammar;
@@ -27,9 +27,21 @@ FuncType: FuncType = "int" => FuncType::Int;
 
 Block: Block = "{" <stmt: Stmt> "}" => Block { <> };
 
-Stmt: Stmt = "return" <num: Number> ";" => Stmt { <> };
+Stmt: Stmt = "return" <aexp: AExp> ";" => Stmt { <> };
 
 Number: i32 = <num: IntConst> => <>;
+
+AExp: AExp = {
+  "(" <aexp: AExp> ")" => aexp,
+  <num: IntConst> => AExp::ANum(num),
+  <unary_op: UnaryOp> <aexp: AExp> => AExp::AUnAry(unary_op, Box::new(aexp)),
+};
+
+UnaryOp: UnAryOp = {
+  "+" => UnAryOp::APlus,
+  "-" => UnAryOp::Minus,
+  "!" => UnAryOp::Not,
+}
 
 
 // 如果匹配到标识符, 就返回这个字符串
