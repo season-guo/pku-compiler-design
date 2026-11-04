@@ -162,13 +162,16 @@ impl<'a> RiscVGenerator<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Mode, koopa::koopa::build_program_from_compunit, sysy};
+    use crate::{Mode, koopa::koopa::KoopaGenerator, sysy};
     use std::fs::read_to_string;
     #[test]
     fn aexp_sysy_2_riscv() {
-        let input = read_to_string("test/lv3/24_landq.c").unwrap();
+        let input = read_to_string("test/lv4/asgn.c").unwrap();
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let mode = Mode::RiscV;
-        mode.handle(&build_program_from_compunit(ast), None);
+        mode.handle(
+            &KoopaGenerator::new(ast).build_program_from_compunit(),
+            None,
+        );
     }
 }

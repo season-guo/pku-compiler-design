@@ -30,7 +30,7 @@ fn main() -> Result<()> {
 
     // 调用 lalrpop 生成的 parser 解析输入文件
     let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
-    let program = crate::koopa::koopa::build_program_from_compunit(ast);
+    let program = crate::koopa::koopa::KoopaGenerator::new(ast).build_program_from_compunit();
     let mode: Mode = mode.into();
     mode.handle(&program, output);
 

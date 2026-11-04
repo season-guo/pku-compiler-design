@@ -1,4 +1,4 @@
-use crate::ast::{func::*, aexp::*};
+use crate::ast::{func::*, aexp::*, r#type::*, decl::*};
 
 // lalrpop 里的约定
 grammar;
@@ -18,14 +18,18 @@ match {
 pub CompUnit: CompUnit = <func_def: FuncDef> => CompUnit { <> };
 
 FuncDef: FuncDef = {
-  <func_type: FuncType> <ident: Ident> "(" ")" <block: Block> => {
+  <func_type: Type> <ident: Ident> "(" ")" <block: Block> => {
     FuncDef { <> }
   }
 }
 
-FuncType: FuncType = "int" => FuncType::Int;
+Type: Type = "int" => Type::Int;
 
-Block: Block = "{" <stmt: Stmt> "}" => Block { <> };
+Block: Block = "{" <items: (<BlockItem>)*> "}" => Block { <> };
+BlockItem: BlockItem = {
+  <stmt: Stmt> => BlockItem::Stmt(stmt),
+  <decl: Decl> => BlockItem::Decl(decl),
+};
 
 Stmt: Stmt = "return" <aexp: AExp> ";" => Stmt { <> };
 
@@ -85,14 +89,14 @@ UnaryExp: AExp = {
 PrimaryExp: AExp = {
   "(" <exp: AExp> ")" => exp,
   <num: IntConst> => AExp::ANum(num),
+  <val: Ident> => AExp::AVal(val),
 };
 
 UnaryOp: UnAryOp = {
   "+" => UnAryOp::Plus,
   "-" => UnAryOp::Minus,
   "!" => UnAryOp::Not,
-}
-
+};
 
 // 如果匹配到标识符, 就返回这个字符串
 // 一对尖括号在此处指代的是正则表达式匹配到的字符串 (&str)
@@ -105,3 +109,14 @@ IntConst: i32 = {
   r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
   r"0[xX][0-9a-fA-F]+" => i32::from_str_radix(&<>[2..], 16).unwrap(),
 }
+
+Decl: Decl = {
+  "const" <r#type: Type> <first: Asgn> <rest: ("," <Asgn>)*> ";" => {
+    let mut defs = Vec::with_capacity(rest.len() + 1);
+    defs.push(first);
+    defs.extend(rest);
+    Decl::Const(r#type, defs)
+  }
+};
+
+Asgn: Asgn = <ident: Ident> "=" <val: AExp> => Asgn{ident, val: val.calcul_bef_compile()};
