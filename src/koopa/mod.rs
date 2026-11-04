@@ -1,2 +1,2 @@
-pub(crate) mod koopa_macro;
 pub mod koopa;
+pub(crate) mod koopa_macro;

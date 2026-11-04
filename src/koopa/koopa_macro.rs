@@ -1,7 +1,7 @@
 #[macro_export]
 macro_rules! new_bb {
     ($func:expr) => {
-       $func.dfg_mut().new_bb() 
+        $func.dfg_mut().new_bb()
     };
 }
 
@@ -22,7 +22,10 @@ macro_rules! add_bb {
 #[macro_export]
 macro_rules! add_value {
     ($func:expr, $bb:expr, $val:expr) => {
-       $func.layout_mut().bb_mut($bb).insts_mut().push_key_back($val)
+        $func
+            .layout_mut()
+            .bb_mut($bb)
+            .insts_mut()
+            .push_key_back($val)
     };
 }
-

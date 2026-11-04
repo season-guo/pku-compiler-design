@@ -21,7 +21,7 @@ impl Mode {
     pub fn handle(self: &Self, program: &Program, output: Option<String>) {
         if let Some(output) = output {
             let file = std::fs::File::create(output).unwrap();
-            self.write(program, file); 
+            self.write(program, file);
         } else {
             self.write(program, std::io::stdout());
         }

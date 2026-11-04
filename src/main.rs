@@ -6,9 +6,9 @@ use std::io::Result;
 use crate::mode::Mode;
 
 pub mod ast;
-pub mod risc;
 pub mod koopa;
 pub mod mode;
+pub mod risc;
 
 // 引用 lalrpop 生成的解析器
 // 因为我们刚刚创建了 sysy.lalrpop, 所以模块名是 sysy
@@ -31,8 +31,8 @@ fn main() -> Result<()> {
     // 调用 lalrpop 生成的 parser 解析输入文件
     let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
     let program = crate::koopa::koopa::build_program_from_compunit(ast);
-    let mode : Mode = mode.into();
-    mode.handle(&program, output); 
+    let mode: Mode = mode.into();
+    mode.handle(&program, output);
 
     Ok(())
 }

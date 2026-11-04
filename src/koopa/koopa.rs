@@ -1,12 +1,22 @@
-use koopa::ir::{BasicBlock, BinaryOp::self, FunctionData, Program, Value, builder::{BasicBlockBuilder, LocalInstBuilder, ValueBuilder}};
-use crate::ast::{aexp::{AExp, ABinaryOp, UnAryOp}, func::CompUnit};
-use crate::{new_bb, new_value, add_bb, add_value};
+use crate::ast::{
+    aexp::{ABinaryOp, AExp, UnAryOp},
+    func::CompUnit,
+};
+use crate::{add_bb, add_value, new_bb, new_value};
+use koopa::ir::{
+    BasicBlock, BinaryOp, FunctionData, Program, Value,
+    builder::{BasicBlockBuilder, LocalInstBuilder, ValueBuilder},
+};
 
-pub fn aexp_to_koopa_insts(function_data: &mut FunctionData, block: &BasicBlock, aexp: AExp) -> Value {
+pub fn aexp_to_koopa_insts(
+    function_data: &mut FunctionData,
+    block: &BasicBlock,
+    aexp: AExp,
+) -> Value {
     match aexp {
         AExp::ANum(num) => new_value!(function_data).integer(num),
         AExp::AUnAry(op, aexp) => {
-            let pre_value= aexp_to_koopa_insts(function_data, block, *aexp);
+            let pre_value = aexp_to_koopa_insts(function_data, block, *aexp);
             match op {
                 UnAryOp::Plus => pre_value,
                 UnAryOp::Minus => {
@@ -51,7 +61,7 @@ pub fn aexp_to_koopa_insts(function_data: &mut FunctionData, block: &BasicBlock,
                     let expr = new_value!(function_data).binary(BinaryOp::Or, lhs, rhs);
                     let _ = add_value!(function_data, *block, expr);
                     return expr;
-                },
+                }
                 ABinaryOp::Eq => BinaryOp::Eq,
                 ABinaryOp::Neq => BinaryOp::NotEq,
                 ABinaryOp::Lt => BinaryOp::Lt,
@@ -74,9 +84,9 @@ pub fn build_program_from_compunit(CompUnit { func_def }: CompUnit) -> Program {
     let main = program.new_func_def(format!("@{}", func_def.ident), vec![], func_type);
     let main_ref = program.func_mut(main);
     let entry = new_bb!(main_ref).basic_block(Some("%entry".into()));
-    let _ = add_bb!(main_ref, entry); 
+    let _ = add_bb!(main_ref, entry);
 
-    let ret_value = aexp_to_koopa_insts(main_ref,& entry, func_def.block.stmt.aexp);
+    let ret_value = aexp_to_koopa_insts(main_ref, &entry, func_def.block.stmt.aexp);
     let ret = new_value!(main_ref).ret(Some(ret_value));
 
     let _ = add_value!(main_ref, entry, ret);
@@ -84,12 +94,12 @@ pub fn build_program_from_compunit(CompUnit { func_def }: CompUnit) -> Program {
     program
 }
 
-#[cfg(test)] 
+#[cfg(test)]
 mod tests {
-    use std::fs::read_to_string;
-    use koopa::ir::{ValueKind};
-use lalrpop_util::lalrpop_mod;
     use crate::{koopa::koopa::build_program_from_compunit, mode::Mode};
+    use koopa::ir::ValueKind;
+    use lalrpop_util::lalrpop_mod;
+    use std::fs::read_to_string;
     lalrpop_mod!(sysy);
 
     #[test]
@@ -113,10 +123,10 @@ use lalrpop_util::lalrpop_mod;
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let mode = Mode::Koopa;
         let program = build_program_from_compunit(ast);
-        mode.handle(&program , None);
+        mode.handle(&program, None);
         for func in program.func_layout() {
             let funcion_data = program.func(*func);
-            for (_, node) in funcion_data.layout().bbs(){
+            for (_, node) in funcion_data.layout().bbs() {
                 for (val, _) in node.insts() {
                     let val_data = funcion_data.dfg().value(*val);
                     //println!("{:#?}", val_data);

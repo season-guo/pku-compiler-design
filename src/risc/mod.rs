@@ -1,2 +1,2 @@
-pub mod risc;
 pub(crate) mod inst;
+pub mod risc;
