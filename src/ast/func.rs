@@ -1,5 +1,5 @@
 use crate::ast::aexp::AExp;
-use crate::ast::decl::Decl;
+use crate::ast::decl::{Asgn, Decl};
 use crate::ast::r#type::Type;
 
 #[derive(Debug)]
@@ -26,6 +26,7 @@ pub enum BlockItem {
 }
 
 #[derive(Debug, Clone)]
-pub struct Stmt {
-    pub aexp: AExp,
+pub enum Stmt {
+    Ret(AExp),
+    Asgn(Asgn),
 }

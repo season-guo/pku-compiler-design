@@ -30,7 +30,7 @@ impl Mode {
     pub fn write(self: &Self, program: &Program, writer: impl Write) {
         match self {
             Mode::RiscV => crate::risc::risc::RiscVGenerator::new(program).koopa_to_risc(writer),
-            Mode::Koopa => KoopaGenerator::new(writer).generate_on(&program).unwrap(),
+            Mode::Koopa => KoopaGenerator::new(writer).generate_on(program).unwrap(),
         }
     }
 }

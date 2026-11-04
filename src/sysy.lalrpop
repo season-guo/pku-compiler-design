@@ -31,7 +31,10 @@ BlockItem: BlockItem = {
   <decl: Decl> => BlockItem::Decl(decl),
 };
 
-Stmt: Stmt = "return" <aexp: AExp> ";" => Stmt { <> };
+Stmt: Stmt = {
+  "return" <aexp: AExp> ";" => Stmt::Ret(aexp),
+  <asgn: Asgn> ";" => Stmt::Asgn(asgn),
+};
 
 Number: i32 = <num: IntConst> => <>;
 
@@ -116,7 +119,16 @@ Decl: Decl = {
     defs.push(first);
     defs.extend(rest);
     Decl::Const(r#type, defs)
-  }
+  },
+  <r#type: Type> <first: Asgn> <rest: ("," <Asgn>)*> ";" => {
+    let mut defs = Vec::with_capacity(rest.len() + 1);
+    defs.push(first);
+    defs.extend(rest);
+    Decl::Var(r#type, defs)
+  },
 };
 
-Asgn: Asgn = <ident: Ident> "=" <val: AExp> => Asgn{ident, val: val.calcul_bef_compile()};
+Asgn: Asgn = {
+  <ident: Ident> "=" <val: AExp> => Asgn{ident, val: Some(val)},
+  <ident: Ident> => Asgn{ident, val: None}
+};

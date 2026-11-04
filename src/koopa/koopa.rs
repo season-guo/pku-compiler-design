@@ -7,13 +7,19 @@ use crate::ast::{
 };
 use crate::{add_bb, add_value, new_bb, new_value};
 use koopa::ir::{
-    BasicBlock, BinaryOp, FunctionData, Program, Value,
+    BasicBlock, BinaryOp, FunctionData, Program, Type, Value,
     builder::{BasicBlockBuilder, LocalInstBuilder, ValueBuilder},
 };
 
+#[derive(Clone)]
+enum Symbol {
+    Const(AExp),
+    Var(Value),
+}
+
 pub struct KoopaGenerator {
-    pub comp_unit: CompUnit,
-    pub symbol_map: HashMap<String, AExp>,
+    comp_unit: CompUnit,
+    symbol_map: HashMap<String, Symbol>,
 }
 
 impl KoopaGenerator {
@@ -23,6 +29,55 @@ impl KoopaGenerator {
             symbol_map: HashMap::new(),
         }
     }
+
+    pub fn calcul_bef_compile(self: &Self, aexp: AExp) -> AExp {
+        match aexp {
+            AExp::ANum(num) => AExp::ANum(num),
+            AExp::AVal(id) => {
+                if let Some(Symbol::Const(exp)) = self.symbol_map.get(&id) {
+                    exp.clone()
+                } else {
+                    panic!("cacul const encounter a var");
+                }
+            }
+            AExp::AUnAry(op, aexp) => {
+                let simpl_aexp = self.calcul_bef_compile(*aexp);
+                if let AExp::ANum(num) = simpl_aexp {
+                    match op {
+                        UnAryOp::Plus => AExp::ANum(num),
+                        UnAryOp::Minus => AExp::ANum(-num),
+                        UnAryOp::Not => AExp::ANum(if num == 0 { 1 } else { 0 }),
+                    }
+                } else {
+                    panic!("decl a const, while it can't be cacul completely");
+                }
+            }
+            AExp::ABinary(op, lhs, rhs) => {
+                let simpl_lhs = self.calcul_bef_compile(*lhs);
+                let simpl_rhs = self.calcul_bef_compile(*rhs);
+                if let (AExp::ANum(lhs), AExp::ANum(rhs)) = (simpl_lhs, simpl_rhs) {
+                    match op {
+                        ABinaryOp::Plus => AExp::ANum(lhs + rhs),
+                        ABinaryOp::Minus => AExp::ANum(lhs - rhs),
+                        ABinaryOp::Mul => AExp::ANum(lhs * rhs),
+                        ABinaryOp::Mod => AExp::ANum(lhs % rhs),
+                        ABinaryOp::Div => AExp::ANum(lhs / rhs),
+                        ABinaryOp::Or => AExp::ANum((lhs != 0 || rhs != 0).into()),
+                        ABinaryOp::And => AExp::ANum((lhs != 0 && rhs != 0).into()),
+                        ABinaryOp::Eq => AExp::ANum((lhs == rhs).into()),
+                        ABinaryOp::Neq => AExp::ANum((lhs != rhs).into()),
+                        ABinaryOp::Lt => AExp::ANum((lhs < rhs).into()),
+                        ABinaryOp::Le => AExp::ANum((lhs <= rhs).into()),
+                        ABinaryOp::Gt => AExp::ANum((lhs > rhs).into()),
+                        ABinaryOp::Ge => AExp::ANum((lhs >= rhs).into()),
+                    }
+                } else {
+                    panic!("decl a const, while it can't be cacul completely");
+                }
+            }
+        }
+    }
+
     pub fn aexp_to_koopa_insts(
         self: &mut Self,
         function_data: &mut FunctionData,
@@ -60,8 +115,7 @@ impl KoopaGenerator {
                     ABinaryOp::Div => BinaryOp::Div,
                     ABinaryOp::And => {
                         let zero = new_value!(function_data).integer(0);
-                        let lhs =
-                            new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero.clone());
+                        let lhs = new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero);
                         let rhs = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
                         let _ = add_value!(function_data, *block, lhs);
                         let _ = add_value!(function_data, *block, rhs);
@@ -71,8 +125,7 @@ impl KoopaGenerator {
                     }
                     ABinaryOp::Or => {
                         let zero = new_value!(function_data).integer(0);
-                        let lhs =
-                            new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero.clone());
+                        let lhs = new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero);
                         let rhs = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
                         let _ = add_value!(function_data, *block, lhs);
                         let _ = add_value!(function_data, *block, rhs);
@@ -92,13 +145,17 @@ impl KoopaGenerator {
                 let _ = add_value!(function_data, *block, expr);
                 expr
             }
-            AExp::AVal(val) => {
-                if let Some(exp) = self.symbol_map.get(&val) {
+            AExp::AVal(ident) => match self.symbol_map.get(&ident) {
+                Some(Symbol::Const(exp)) => {
                     self.aexp_to_koopa_insts(function_data, block, exp.clone())
-                } else {
-                    panic!("no such value");
                 }
-            }
+                Some(Symbol::Var(val)) => {
+                    let expr = new_value!(function_data).load(*val);
+                    let _ = add_value!(function_data, *block, expr);
+                    expr
+                }
+                None => panic!("no such value"),
+            },
         }
     }
 
@@ -114,16 +171,43 @@ impl KoopaGenerator {
 
         for item in func_def.clone().block.items {
             match item {
-                BlockItem::Decl(Decl::Const(_, asgns) | Decl::Var(_, asgns)) => {
+                BlockItem::Decl(Decl::Const(_, asgns)) => {
                     for Asgn { ident, val } in asgns {
-                        self.symbol_map.insert(ident.clone(), val.clone());
+                        self.symbol_map.insert(
+                            ident.clone(),
+                            Symbol::Const(self.calcul_bef_compile(val.unwrap().clone())),
+                        );
                     }
                 }
-                BlockItem::Stmt(Stmt { aexp }) => {
+                BlockItem::Decl(Decl::Var(_, asgns)) => {
+                    for Asgn { ident, val } in asgns {
+                        let alloc = new_value!(main_ref).alloc(Type::get_i32());
+                        self.symbol_map.insert(ident.clone(), Symbol::Var(alloc));
+
+                        let _ = add_value!(main_ref, entry, alloc);
+
+                        if let Some(val) = val {
+                            let store_val = self.aexp_to_koopa_insts(main_ref, &entry, val.clone());
+                            let store = new_value!(main_ref).store(store_val, alloc);
+                            let _ = add_value!(main_ref, entry, store);
+                        }
+                    }
+                }
+                BlockItem::Stmt(Stmt::Ret(aexp)) => {
                     let ret_value = self.aexp_to_koopa_insts(main_ref, &entry, aexp.clone());
                     let ret = new_value!(main_ref).ret(Some(ret_value));
 
                     let _ = add_value!(main_ref, entry, ret);
+                }
+                BlockItem::Stmt(Stmt::Asgn(Asgn { ident, val })) => {
+                    let var = self.symbol_map.get(&ident).unwrap().clone();
+                    if let Symbol::Var(var) = var {
+                        let aexp_val =
+                            self.aexp_to_koopa_insts(main_ref, &entry, val.unwrap().clone());
+                        let store = new_value!(main_ref).store(aexp_val, var);
+
+                        let _ = add_value!(main_ref, entry, store);
+                    }
                 }
             }
         }

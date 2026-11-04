@@ -10,6 +10,7 @@ pub enum Register {
     T5,
     T6, //临时寄存器
     A0, //函数返回值
+    SP, //栈指针
 }
 
 #[derive(Debug)]
@@ -30,12 +31,15 @@ pub enum Inst {
     SLt(Register, Register, Register),
     SGt(Register, Register, Register),
     Xor(Register, Register, Register),
+    Lw(Register, Register, i32),
+    Sw(Register, Register, i32),
+    Addi(Register, Register, i32),
     Ret,
 }
 
-impl ToString for Register {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             Self::X0 => "x0",
             Self::X1 => "x1",
             Self::T0 => "t0",
@@ -46,8 +50,9 @@ impl ToString for Register {
             Self::T5 => "t5",
             Self::T6 => "t6",
             Self::A0 => "a0",
-        }
-        .into()
+            Self::SP => "sp",
+        };
+        f.write_str(s)
     }
 }
 
@@ -66,11 +71,7 @@ impl Register {
     }
 
     pub fn which_to_reuse(self: &Self, other: &Self) -> Self {
-        if !self.is_temp() {
-            other.clone()
-        } else {
-            self.clone()
-        }
+        if !self.is_temp() { *other } else { *self }
     }
 }
 
@@ -78,71 +79,24 @@ impl ToString for Inst {
     fn to_string(&self) -> String {
         match self {
             Self::Int(num) => num.to_string(),
-            Self::Li(rd, imm) => format!("  li {}, {imm}\n", rd.to_string()),
-            Self::Mv(rd, rs) => format!("  mv {}, {}\n", rd.to_string(), rs.to_string()),
-            Self::Add(rd, rs1, rs2) => format!(
-                "  add {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::Sub(rd, rs1, rs2) => format!(
-                "  sub {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::Mul(rd, rs1, rs2) => format!(
-                "  mul {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::Div(rd, rs1, rs2) => format!(
-                "  div {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::Rem(rd, rs1, rs2) => format!(
-                "  rem {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::Or(rd, rs1, rs2) => format!(
-                "  or {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::And(rd, rs1, rs2) => format!(
-                "  and {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::SLt(rd, rs1, rs2) => format!(
-                "  slt {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::SGt(rd, rs1, rs2) => format!(
-                "  sgt {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::Xor(rd, rs1, rs2) => format!(
-                "  xor {}, {}, {}\n",
-                rd.to_string(),
-                rs1.to_string(),
-                rs2.to_string()
-            ),
-            Self::Seqz(rd, rs) => format!("  seqz {}, {}\n", rd.to_string(), rs.to_string()),
-            Self::SNez(rd, rs) => format!("  snez {}, {}\n", rd.to_string(), rs.to_string()),
-            Self::Ret => format!("  ret\n"),
+            Self::Li(rd, imm) => format!("  li {}, {imm}\n", rd),
+            Self::Mv(rd, rs) => format!("  mv {}, {}\n", rd, rs),
+            Self::Add(rd, rs1, rs2) => format!("  add {}, {}, {}\n", rd, rs1, rs2),
+            Self::Sub(rd, rs1, rs2) => format!("  sub {}, {}, {}\n", rd, rs1, rs2),
+            Self::Mul(rd, rs1, rs2) => format!("  mul {}, {}, {}\n", rd, rs1, rs2),
+            Self::Div(rd, rs1, rs2) => format!("  div {}, {}, {}\n", rd, rs1, rs2),
+            Self::Rem(rd, rs1, rs2) => format!("  rem {}, {}, {}\n", rd, rs1, rs2),
+            Self::Or(rd, rs1, rs2) => format!("  or {}, {}, {}\n", rd, rs1, rs2),
+            Self::And(rd, rs1, rs2) => format!("  and {}, {}, {}\n", rd, rs1, rs2),
+            Self::SLt(rd, rs1, rs2) => format!("  slt {}, {}, {}\n", rd, rs1, rs2),
+            Self::SGt(rd, rs1, rs2) => format!("  sgt {}, {}, {}\n", rd, rs1, rs2),
+            Self::Xor(rd, rs1, rs2) => format!("  xor {}, {}, {}\n", rd, rs1, rs2),
+            Self::Seqz(rd, rs) => format!("  seqz {}, {}\n", rd, rs),
+            Self::SNez(rd, rs) => format!("  snez {}, {}\n", rd, rs),
+            Self::Lw(rs, rd, imm) => format!("  lw {rs}, {imm}({rd})\n"),
+            Self::Sw(rs2, rs1, imm) => format!("  sw {rs2}, {imm}({rs1})\n"),
+            Self::Addi(rd, rs, imm) => format!("  addi {rd}, {rs}, {imm}\n"),
+            Self::Ret => "  ret\n".to_string(),
         }
     }
 }

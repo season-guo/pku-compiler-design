@@ -10,5 +10,5 @@ pub enum Decl {
 #[derive(Debug, Clone)]
 pub struct Asgn {
     pub ident: String,
-    pub val: AExp,
+    pub val: Option<AExp>,
 }
