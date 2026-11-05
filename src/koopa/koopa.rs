@@ -237,28 +237,6 @@ mod tests {
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let builder = crate::koopa::koopa::KoopaGenerator::new(ast);
         let mode = Mode::Koopa;
-        mode.handle(&builder.build_program_from_compunit(), None);
-    }
-
-    #[test]
-    fn koopa_binary_lrhs_value_kind() {
-        let input = read_to_string("test/lv3/unary.sysy").unwrap();
-        let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
-        let mode = Mode::Koopa;
-        let builder = crate::koopa::koopa::KoopaGenerator::new(ast);
-        let program = builder.build_program_from_compunit();
-        mode.handle(&program, None);
-        for func in program.func_layout() {
-            let funcion_data = program.func(*func);
-            for (_, node) in funcion_data.layout().bbs() {
-                for (val, _) in node.insts() {
-                    let val_data = funcion_data.dfg().value(*val);
-                    //println!("{:#?}", val_data);
-                    if let ValueKind::Binary(bin) = val_data.kind() {
-                        println!("{:#?}", funcion_data.dfg().value(bin.rhs()));
-                    }
-                }
-            }
-        }
+        mode.handle(builder.build_program_from_compunit(), None);
     }
 }

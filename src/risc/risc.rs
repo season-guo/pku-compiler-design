@@ -252,7 +252,7 @@ mod tests {
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let mode = Mode::RiscV;
         mode.handle(
-            &KoopaGenerator::new(ast).build_program_from_compunit(),
+            KoopaGenerator::new(ast).build_program_from_compunit(),
             None,
         );
     }
