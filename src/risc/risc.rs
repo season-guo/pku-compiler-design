@@ -1,68 +1,57 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    io::Write,
-};
+use std::{collections::HashMap, io::Write};
 
 use koopa::ir::{BinaryOp, FunctionData, Program, Value, ValueKind, entities::ValueData};
 
 use crate::risc::inst::{Inst, Register};
 
-pub struct RiscVGenerator<'a> {
-    pub program: &'a Program, // 本来这里最好直接move但是test不方便...或者换 rc 可能好点，反正写了这个了都...
+pub struct RiscVGenerator {
     pub value_map: HashMap<Value, Register>,
 }
 
-impl<'a> RiscVGenerator<'a> {
-    pub fn new(program: &'a Program) -> Self {
+impl RiscVGenerator {
+    pub fn new() -> Self {
         RiscVGenerator {
-            program,
             value_map: HashMap::new(),
         }
     }
-    pub fn koopa_to_risc(self: &mut Self, mut writer: impl Write) {
+    pub fn koopa_to_risc(mut self: Self, program: Program, mut writer: impl Write) {
         let mut prefix: String = " .text\n .global main\n".into();
-        let program = self.program;
         for func in program.func_layout() {
             let func_data = program.func(*func);
             prefix += &self.koopa_function_to_risc(func_data);
         }
 
-        let _ = writer.write(&prefix.into_bytes());
+        let _ = writer.write_all(prefix.as_bytes());
     }
 
     fn koopa_function_to_risc(self: &mut Self, function_data: &FunctionData) -> String {
-        let mut prefix = "main:\n".to_owned();
-        let mut space_need = 0;
+        let mut prefix = format!("{}:\n", function_data.name().trim_start_matches('@'));
+        let mut space_need = 0i32;
 
         for (_, node) in function_data.layout().bbs() {
             for (val, _) in node.insts() {
                 let val_data = function_data.dfg().value(*val);
-                if let ValueKind::Alloc(_) = val_data.kind() {
-                    space_need += 4;
-                } else if !val_data.ty().is_unit() {
+                if matches!(val_data.kind(), ValueKind::Alloc(_)) || !val_data.ty().is_unit() {
                     space_need += 4;
                 }
             }
         }
 
-        let space_mod = space_need % 16;
-        if space_mod != 0 {
-            space_need = space_need + 16 - space_mod;
-        }
+        space_need = (space_need + 15) & !15;
         prefix += &Inst::Addi(Register::SP, Register::SP, -space_need).to_string();
+        prefix += "\n";
         let mut stack_offset = 0;
         let mut stack_map = HashMap::new();
 
         for (_, node) in function_data.layout().bbs() {
             for (val, _) in node.insts() {
-                prefix += self
+                prefix += &self
                     .koopa_inst_to_risc(function_data, val, &mut stack_offset, &mut stack_map)
                     .into_iter()
                     .map(|inst| inst.to_string())
-                    .reduce(|s1, s2| s1 + &s2)
-                    .unwrap_or_else(|| "".into())
-                    .as_str();
-                prefix += "\n"
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                prefix += "\n"; // 分开koopa指令方便看
             }
         }
 
@@ -125,13 +114,11 @@ impl<'a> RiscVGenerator<'a> {
                         }
                     })
                     .unwrap_or_else(|| Inst::Li(Register::A0, 0));
+
                 if *stack_offset == 0 {
                     vec![asgn_inst, Inst::Ret]
                 } else {
-                    let space_mod = *stack_offset % 16;
-                    if space_mod != 0 {
-                        *stack_offset += 16 - space_mod;
-                    }
+                    *stack_offset = (*stack_offset + 15) & !15;
                     vec![
                         asgn_inst,
                         Inst::Addi(Register::SP, Register::SP, *stack_offset),
@@ -222,20 +209,23 @@ impl<'a> RiscVGenerator<'a> {
             ValueKind::Alloc(_) => vec![],
             ValueKind::Load(load) => {
                 let src = load.src();
-                println!("{:#?}", function_data.dfg().value(src));
                 let load_offset = *stack_map.get(&src).unwrap();
+
                 let load_to_rg_inst = Inst::Lw(Register::T0, Register::SP, load_offset);
                 let load_to_st_inst = Inst::Sw(Register::T0, Register::SP, *stack_offset);
+
                 stack_map.insert(*val, *stack_offset);
                 *stack_offset += 4;
+
                 vec![load_to_rg_inst, load_to_st_inst]
             }
             ValueKind::Store(store) => {
-                let dest = store.dest();
                 let store_val = store.value();
                 let store_val_data = function_data.dfg().value(store_val);
                 let (mut store_insts, store_register) =
                     self.imm_to_register(&store_val, store_val_data, false, None, stack_map);
+
+                let dest = store.dest();
                 let store_in_stack_inst = if let Some(offset) = stack_map.get(&dest) {
                     Inst::Sw(store_register, Register::SP, *offset)
                 } else {

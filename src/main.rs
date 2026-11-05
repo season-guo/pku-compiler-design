@@ -26,13 +26,11 @@ fn main() -> Result<()> {
     // 读取输入文件
     let input = read_to_string(input)?;
 
-    println!("{}", input);
-
     // 调用 lalrpop 生成的 parser 解析输入文件
     let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
     let program = crate::koopa::koopa::KoopaGenerator::new(ast).build_program_from_compunit();
     let mode: Mode = mode.into();
-    mode.handle(&program, output);
+    mode.handle(program, output);
 
     Ok(())
 }

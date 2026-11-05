@@ -5,10 +5,11 @@ use crate::ast::r#type::Type;
 pub enum Decl {
     Const(Type, Vec<Asgn>),
     Var(Type, Vec<Asgn>),
+    UnInitVar(Type, Vec<String>),
 }
 
 #[derive(Debug, Clone)]
 pub struct Asgn {
     pub ident: String,
-    pub val: Option<AExp>,
+    pub val: AExp,
 }

@@ -1,5 +1,4 @@
 int main() {
-  int x = 10;
-  x = x + 1;
-  return x;
+  const int x = 2, y = x + 1, z = x * y;
+  return z;
 }

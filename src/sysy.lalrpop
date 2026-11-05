@@ -126,9 +126,12 @@ Decl: Decl = {
     defs.extend(rest);
     Decl::Var(r#type, defs)
   },
+  <r#type: Type> <first: Ident> <rest: ("," <Ident>)*> ";" => {
+    let mut defs = Vec::with_capacity(rest.len() + 1);
+    defs.push(first);
+    defs.extend(rest);
+    Decl::UnInitVar(r#type, defs)
+  },
 };
 
-Asgn: Asgn = {
-  <ident: Ident> "=" <val: AExp> => Asgn{ident, val: Some(val)},
-  <ident: Ident> => Asgn{ident, val: None}
-};
+Asgn: Asgn = <ident: Ident> "=" <val: AExp> => Asgn{ident, val};

@@ -11,7 +11,7 @@ use koopa::ir::{
     builder::{BasicBlockBuilder, LocalInstBuilder, ValueBuilder},
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Symbol {
     Const(AExp),
     Var(Value),
@@ -19,29 +19,27 @@ enum Symbol {
 
 pub struct KoopaGenerator {
     comp_unit: CompUnit,
-    symbol_map: HashMap<String, Symbol>,
 }
 
 impl KoopaGenerator {
     pub fn new(comp_unit: CompUnit) -> Self {
         Self {
             comp_unit,
-            symbol_map: HashMap::new(),
         }
     }
 
-    pub fn calcul_bef_compile(self: &Self, aexp: AExp) -> AExp {
+    fn calcul_bef_compile(aexp: AExp, symbol_map: &mut HashMap<String, Symbol>) -> AExp {
         match aexp {
             AExp::ANum(num) => AExp::ANum(num),
             AExp::AVal(id) => {
-                if let Some(Symbol::Const(exp)) = self.symbol_map.get(&id) {
+                if let Some(Symbol::Const(exp)) = symbol_map.get(&id) {
                     exp.clone()
                 } else {
                     panic!("cacul const encounter a var");
                 }
             }
             AExp::AUnAry(op, aexp) => {
-                let simpl_aexp = self.calcul_bef_compile(*aexp);
+                let simpl_aexp = Self::calcul_bef_compile(*aexp, symbol_map);
                 if let AExp::ANum(num) = simpl_aexp {
                     match op {
                         UnAryOp::Plus => AExp::ANum(num),
@@ -53,8 +51,8 @@ impl KoopaGenerator {
                 }
             }
             AExp::ABinary(op, lhs, rhs) => {
-                let simpl_lhs = self.calcul_bef_compile(*lhs);
-                let simpl_rhs = self.calcul_bef_compile(*rhs);
+                let simpl_lhs = Self::calcul_bef_compile(*lhs, symbol_map);
+                let simpl_rhs = Self::calcul_bef_compile(*rhs, symbol_map);
                 if let (AExp::ANum(lhs), AExp::ANum(rhs)) = (simpl_lhs, simpl_rhs) {
                     match op {
                         ABinaryOp::Plus => AExp::ANum(lhs + rhs),
@@ -78,16 +76,17 @@ impl KoopaGenerator {
         }
     }
 
-    pub fn aexp_to_koopa_insts(
+    fn aexp_to_koopa_insts(
         self: &mut Self,
         function_data: &mut FunctionData,
         block: &BasicBlock,
         aexp: AExp,
+        symbol_map: &mut HashMap<String, Symbol>
     ) -> Value {
         match aexp {
             AExp::ANum(num) => new_value!(function_data).integer(num),
             AExp::AUnAry(op, aexp) => {
-                let pre_value = self.aexp_to_koopa_insts(function_data, block, *aexp);
+                let pre_value = self.aexp_to_koopa_insts(function_data, block, *aexp, symbol_map);
                 match op {
                     UnAryOp::Plus => pre_value,
                     UnAryOp::Minus => {
@@ -105,8 +104,8 @@ impl KoopaGenerator {
                 }
             }
             AExp::ABinary(op, lhs, rhs) => {
-                let lhs = self.aexp_to_koopa_insts(function_data, block, *lhs);
-                let rhs = self.aexp_to_koopa_insts(function_data, block, *rhs);
+                let lhs = self.aexp_to_koopa_insts(function_data, block, *lhs, symbol_map);
+                let rhs = self.aexp_to_koopa_insts(function_data, block, *rhs, symbol_map);
                 let bin_op = match op {
                     ABinaryOp::Plus => BinaryOp::Add,
                     ABinaryOp::Minus => BinaryOp::Sub,
@@ -145,9 +144,9 @@ impl KoopaGenerator {
                 let _ = add_value!(function_data, *block, expr);
                 expr
             }
-            AExp::AVal(ident) => match self.symbol_map.get(&ident) {
+            AExp::AVal(ident) => match symbol_map.get(&ident) {
                 Some(Symbol::Const(exp)) => {
-                    self.aexp_to_koopa_insts(function_data, block, exp.clone())
+                    self.aexp_to_koopa_insts(function_data, block, exp.clone(), symbol_map)
                 }
                 Some(Symbol::Var(val)) => {
                     let expr = new_value!(function_data).load(*val);
@@ -159,7 +158,7 @@ impl KoopaGenerator {
         }
     }
 
-    pub fn build_program_from_compunit(self: &mut Self) -> Program {
+    pub fn build_program_from_compunit(mut self: Self) -> Program {
         let mut program = Program::new();
         let func_def = &self.comp_unit.func_def;
         let func_type = func_def.func_type.clone().into();
@@ -168,42 +167,44 @@ impl KoopaGenerator {
         let main_ref = program.func_mut(main);
         let entry = new_bb!(main_ref).basic_block(Some("%entry".into()));
         let _ = add_bb!(main_ref, entry);
+        let mut symbol_map = HashMap::new();
 
         for item in func_def.clone().block.items {
             match item {
                 BlockItem::Decl(Decl::Const(_, asgns)) => {
                     for Asgn { ident, val } in asgns {
-                        self.symbol_map.insert(
-                            ident.clone(),
-                            Symbol::Const(self.calcul_bef_compile(val.unwrap().clone())),
-                        );
+                        let symbol = Symbol::Const(Self::calcul_bef_compile(val.clone(), &mut symbol_map));
+                        symbol_map.insert(ident.clone(), symbol);
                     }
                 }
                 BlockItem::Decl(Decl::Var(_, asgns)) => {
                     for Asgn { ident, val } in asgns {
                         let alloc = new_value!(main_ref).alloc(Type::get_i32());
-                        self.symbol_map.insert(ident.clone(), Symbol::Var(alloc));
-
+                        symbol_map.insert(ident.clone(), Symbol::Var(alloc));
                         let _ = add_value!(main_ref, entry, alloc);
 
-                        if let Some(val) = val {
-                            let store_val = self.aexp_to_koopa_insts(main_ref, &entry, val.clone());
-                            let store = new_value!(main_ref).store(store_val, alloc);
-                            let _ = add_value!(main_ref, entry, store);
-                        }
+                        let store_val = self.aexp_to_koopa_insts(main_ref, &entry, val.clone(), &mut symbol_map);
+                        let store = new_value!(main_ref).store(store_val, alloc);
+                        let _ = add_value!(main_ref, entry, store);
+                    }
+                }
+                BlockItem::Decl(Decl::UnInitVar(_, idents)) => {
+                    for ident in idents {
+                        let alloc = new_value!(main_ref).alloc(Type::get_i32());
+                        symbol_map.insert(ident.clone(), Symbol::Var(alloc));
+                        let _ = add_value!(main_ref, entry, alloc);
                     }
                 }
                 BlockItem::Stmt(Stmt::Ret(aexp)) => {
-                    let ret_value = self.aexp_to_koopa_insts(main_ref, &entry, aexp.clone());
+                    let ret_value = self.aexp_to_koopa_insts(main_ref, &entry, aexp.clone(), &mut symbol_map);
                     let ret = new_value!(main_ref).ret(Some(ret_value));
 
                     let _ = add_value!(main_ref, entry, ret);
                 }
                 BlockItem::Stmt(Stmt::Asgn(Asgn { ident, val })) => {
-                    let var = self.symbol_map.get(&ident).unwrap().clone();
+                    let var = symbol_map.get(&ident).unwrap().clone();
                     if let Symbol::Var(var) = var {
-                        let aexp_val =
-                            self.aexp_to_koopa_insts(main_ref, &entry, val.unwrap().clone());
+                        let aexp_val = self.aexp_to_koopa_insts(main_ref, &entry, val.clone(), &mut symbol_map);
                         let store = new_value!(main_ref).store(aexp_val, var);
 
                         let _ = add_value!(main_ref, entry, store);
@@ -220,9 +221,8 @@ impl KoopaGenerator {
 mod tests {
     use crate::mode::Mode;
     use koopa::ir::ValueKind;
-    use lalrpop_util::lalrpop_mod;
     use std::fs::read_to_string;
-    lalrpop_mod!(sysy);
+    use crate::sysy;
 
     #[test]
     fn aexp_sysy_2_ast() {
@@ -235,7 +235,7 @@ mod tests {
     fn aexp_sysy_2_koopa() {
         let input = read_to_string("test/lv4/asgn.c").unwrap();
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
-        let mut builder = crate::koopa::koopa::KoopaGenerator::new(ast);
+        let builder = crate::koopa::koopa::KoopaGenerator::new(ast);
         let mode = Mode::Koopa;
         mode.handle(&builder.build_program_from_compunit(), None);
     }
@@ -245,7 +245,7 @@ mod tests {
         let input = read_to_string("test/lv3/unary.sysy").unwrap();
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let mode = Mode::Koopa;
-        let mut builder = crate::koopa::koopa::KoopaGenerator::new(ast);
+        let builder = crate::koopa::koopa::KoopaGenerator::new(ast);
         let program = builder.build_program_from_compunit();
         mode.handle(&program, None);
         for func in program.func_layout() {
