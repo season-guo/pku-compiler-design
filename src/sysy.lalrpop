@@ -29,11 +29,13 @@ Block: Block = "{" <items: (<BlockItem>)*> "}" => Block { <> };
 BlockItem: BlockItem = {
   <stmt: Stmt> => BlockItem::Stmt(stmt),
   <decl: Decl> => BlockItem::Decl(decl),
+  <block: Block> => BlockItem::InnerBlock(block),
 };
 
 Stmt: Stmt = {
   "return" <aexp: AExp> ";" => Stmt::Ret(aexp),
   <asgn: Asgn> ";" => Stmt::Asgn(asgn),
+  <exp: AExp?> ";" => Stmt::Exp(exp),
 };
 
 Number: i32 = <num: IntConst> => <>;
