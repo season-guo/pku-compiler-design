@@ -126,6 +126,13 @@ impl KoopaGenerator {
                         return expr;
                     }
                     ABinaryOp::Or => {
+                        // let result_val = new_value!(function_data).integer(1);
+                        // let cond = new_value!(function_data).binary(BinaryOp::Eq, lhs, result_val);
+                        // let true_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                        // let both_false_end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                        // let branch = new_value!(function_data).branch(cond, true_bb, both_false_end_bb);
+                        // let true_inst 
+
                         let zero = new_value!(function_data).integer(0);
                         let lhs = new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero);
                         let rhs = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
@@ -246,34 +253,47 @@ impl KoopaGenerator {
                     // 啥都不做，目前表达式没有副作用
                 }
                 BlockItem::Stmt(Stmt::If(cond, true_branch, false_branch)) => {
+                    if let Stmt::Exp(None) = *true_branch {
+                        if false_branch.is_none() {
+                            continue;
+                        }
+                        if let Some(inner) = false_branch.as_ref() {
+                            if let Stmt::Exp(None) = **inner {
+                                continue;
+                            }
+                        }
+                    }
+
                     let then_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
-                    let else_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
                     let _ = add_bb!(function_data, then_bb);
-                    let _ = add_bb!(function_data, else_bb);
-
-                    let cond_val = self.aexp_to_koopa_insts(function_data, &bb, cond, symbol_maps);
-                    let br_inst = new_value!(function_data).branch(cond_val, then_bb, else_bb);
-                    let _ = add_value!(function_data, bb, br_inst);
-
-                    let end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name())); // end_bb
+                    let end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
                     let _ = add_bb!(function_data, end_bb);
+
+                    let else_bb = false_branch.is_some().then(|| new_bb!(function_data).basic_block(Some(self.make_block_name())));
+
                     if let Some(prev) = prev_end_block && loc == item_len {
                         let jump_prev_end = new_value!(function_data).jump(prev);
                         let _ = add_value!(function_data, end_bb, jump_prev_end);
                     }
+                    let cond_val = self.aexp_to_koopa_insts(function_data, &bb, cond, symbol_maps);
+                    let br_inst = new_value!(function_data).branch(cond_val, then_bb, else_bb.unwrap_or_else(|| end_bb));
+                    let _ = add_value!(function_data, bb, br_inst);
+
 
                     bb = end_bb;
-                    self.handle_block(Block{items: vec![BlockItem::Stmt(*true_branch)]}, function_data, then_bb, symbol_maps, Some(bb));
-                    if let Some(false_branch) = false_branch {
-                        self.handle_block(Block{items: vec![BlockItem::Stmt(*false_branch)]}, function_data, else_bb, symbol_maps, Some(bb));
-                    }
-
                     let jump_end = new_value!(function_data).jump(bb);
-                    for next_bb in [then_bb, else_bb] {
-                        if !Self::is_terminated(function_data, next_bb) {
-                            let _ = add_value!(function_data, next_bb, jump_end);
+                    self.handle_block(Block{items: vec![BlockItem::Stmt(*true_branch)]}, function_data, then_bb, symbol_maps, Some(bb));
+                    if let Some(else_bb) = else_bb {
+                        let _ = add_bb!(function_data, else_bb);
+                        self.handle_block(Block{items: vec![BlockItem::Stmt(*false_branch.unwrap())]}, function_data, else_bb, symbol_maps, Some(bb));
+                        if !Self::is_terminated(function_data, else_bb) {
+                            let _ = add_value!(function_data, else_bb, jump_end);
                         }
                     }
+                    if !Self::is_terminated(function_data, then_bb) {
+                        let _ = add_value!(function_data, then_bb, jump_end);
+                    }
+
                 }
                 BlockItem::Stmt(Stmt::Block(inner_block)) => self.handle_block(inner_block, function_data, bb, symbol_maps, prev_end_block),
             }

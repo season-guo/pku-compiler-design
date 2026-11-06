@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Register {
     X0, //恒为0的寄存器
