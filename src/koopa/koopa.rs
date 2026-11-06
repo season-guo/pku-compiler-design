@@ -7,7 +7,7 @@ use crate::ast::{
 };
 use crate::{add_bb, add_value, new_bb, new_value};
 use koopa::ir::{
-    BasicBlock, BinaryOp, FunctionData, Program, Type, Value,
+    BasicBlock, BinaryOp, FunctionData, Program, Type, Value, ValueKind,
     builder::{BasicBlockBuilder, LocalInstBuilder, ValueBuilder},
 };
 
@@ -19,12 +19,14 @@ enum Symbol {
 
 pub struct KoopaGenerator {
     comp_unit: CompUnit,
+    block_name: i32, // 自增id
 }
 
 impl KoopaGenerator {
     pub fn new(comp_unit: CompUnit) -> Self {
         Self {
             comp_unit,
+            block_name: 0,
         }
     }
 
@@ -159,13 +161,42 @@ impl KoopaGenerator {
         }
     }
 
+    // 基本块是否已经有终结指令(ret / jump / br)
+    fn is_terminated(function_data: &FunctionData, bb: BasicBlock) -> bool {
+        function_data
+            .layout()
+            .bbs()
+            .node(&bb)
+            .and_then(|node| node.insts().back_key().copied())
+            .map(|val| {
+                matches!(
+                    function_data.dfg().value(val).kind(),
+                    ValueKind::Return(_) | ValueKind::Jump(_) | ValueKind::Branch(_)
+                )
+            })
+            .unwrap_or(false)
+    }
+
+
     fn find_symbol(symbol_maps: &VecDeque<HashMap<String, Symbol>>, key: String) -> Option<&Symbol> {
         symbol_maps.iter().find_map(|symbol_map| symbol_map.get(&key))
     }
 
-    fn handle_block(self:&mut Self, block: Block, function_data: &mut FunctionData, bb: BasicBlock, symbol_maps: &mut VecDeque<HashMap<String, Symbol>>) {
+    fn make_block_name(self: &mut Self) -> String {
+        self.block_name += 1;
+        format!("%block{}", self.block_name.to_string())
+    }
+
+    fn handle_block(self:&mut Self, block: Block, function_data: &mut FunctionData, mut bb: BasicBlock, symbol_maps: &mut VecDeque<HashMap<String, Symbol>>, prev_end_block: Option<BasicBlock>) {
         symbol_maps.push_front(HashMap::new());
+        let mut loc = 0usize;
+        let item_len = block.items.len();
         for item in block.items {
+            if Self::is_terminated(function_data, bb) {
+                break;
+            }
+            loc += 1;
+            // 当前基本块已经以 ret/jump/br 结尾, 后面的语句不可达, 直接丢弃
             match item {
                 BlockItem::Decl(Decl::Const(_, asgns)) => {
                     for Asgn { ident, val } in asgns {
@@ -192,8 +223,13 @@ impl KoopaGenerator {
                     }
                 }
                 BlockItem::Stmt(Stmt::Ret(aexp)) => {
-                    let ret_value = self.aexp_to_koopa_insts(function_data, &bb, aexp.clone(), symbol_maps);
-                    let ret = new_value!(function_data).ret(Some(ret_value));
+                    let ret = match aexp {
+                        Some(aexp) => {
+                            let ret_value = self.aexp_to_koopa_insts(function_data, &bb, aexp, symbol_maps);
+                            new_value!(function_data).ret(Some(ret_value))
+                        }
+                        None => new_value!(function_data).ret(None),
+                    };
 
                     let _ = add_value!(function_data, bb, ret);
                 }
@@ -209,7 +245,37 @@ impl KoopaGenerator {
                 BlockItem::Stmt(Stmt::Exp(_exp)) => {
                     // 啥都不做，目前表达式没有副作用
                 }
-                BlockItem::InnerBlock(inner_block) => self.handle_block(inner_block, function_data, bb, symbol_maps),
+                BlockItem::Stmt(Stmt::If(cond, true_branch, false_branch)) => {
+                    let then_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                    let else_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                    let _ = add_bb!(function_data, then_bb);
+                    let _ = add_bb!(function_data, else_bb);
+
+                    let cond_val = self.aexp_to_koopa_insts(function_data, &bb, cond, symbol_maps);
+                    let br_inst = new_value!(function_data).branch(cond_val, then_bb, else_bb);
+                    let _ = add_value!(function_data, bb, br_inst);
+
+                    let end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name())); // end_bb
+                    let _ = add_bb!(function_data, end_bb);
+                    if let Some(prev) = prev_end_block && loc == item_len {
+                        let jump_prev_end = new_value!(function_data).jump(prev);
+                        let _ = add_value!(function_data, end_bb, jump_prev_end);
+                    }
+
+                    bb = end_bb;
+                    self.handle_block(Block{items: vec![BlockItem::Stmt(*true_branch)]}, function_data, then_bb, symbol_maps, Some(bb));
+                    if let Some(false_branch) = false_branch {
+                        self.handle_block(Block{items: vec![BlockItem::Stmt(*false_branch)]}, function_data, else_bb, symbol_maps, Some(bb));
+                    }
+
+                    let jump_end = new_value!(function_data).jump(bb);
+                    for next_bb in [then_bb, else_bb] {
+                        if !Self::is_terminated(function_data, next_bb) {
+                            let _ = add_value!(function_data, next_bb, jump_end);
+                        }
+                    }
+                }
+                BlockItem::Stmt(Stmt::Block(inner_block)) => self.handle_block(inner_block, function_data, bb, symbol_maps, prev_end_block),
             }
         }
         symbol_maps.pop_front();
@@ -226,7 +292,7 @@ impl KoopaGenerator {
         let _ = add_bb!(main_ref, entry);
         let mut symbol_maps = VecDeque::new();
 
-        self.handle_block(func_def.block.clone(), main_ref, entry, &mut symbol_maps);
+        self.handle_block(func_def.block.clone(), main_ref, entry, &mut symbol_maps, None);
 
         program
     }
@@ -240,14 +306,14 @@ mod tests {
 
     #[test]
     fn aexp_sysy_2_ast() {
-        let input = read_to_string("test/lv5/block.c").unwrap();
+        let input = read_to_string("test/lv6/simple_if.c").unwrap();
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         println!("{:#?}", ast);
     }
 
     #[test]
     fn aexp_sysy_2_koopa() {
-        let input = read_to_string("test/lv5/block.c").unwrap();
+        let input = read_to_string("test/lv6/5_more_logical.c").unwrap();
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let builder = crate::koopa::koopa::KoopaGenerator::new(ast);
         let mode = Mode::Koopa;

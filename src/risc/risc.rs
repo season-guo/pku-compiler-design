@@ -25,7 +25,7 @@ impl RiscVGenerator {
     }
 
     fn koopa_function_to_risc(self: &mut Self, function_data: &FunctionData) -> String {
-        let mut prefix = format!("{}:\n", function_data.name().trim_start_matches('@'));
+        let mut prefix = format!("{}:\n", function_data.name().trim_start_matches(['@', '%']));
         let mut space_need = 0i32;
 
         for (_, node) in function_data.layout().bbs() {
@@ -43,7 +43,13 @@ impl RiscVGenerator {
         let mut stack_offset = 0;
         let mut stack_map = HashMap::new();
 
-        for (_, node) in function_data.layout().bbs() {
+        let mut first = true;
+        for (bb, node) in function_data.layout().bbs() {
+            if !first {
+                prefix += function_data.dfg().bb(*bb).name().as_ref().unwrap().trim_start_matches(['@', '%']);
+                prefix += ":\n";
+            }
+            first = false;
             for (val, _) in node.insts() {
                 prefix += &self
                     .koopa_inst_to_risc(function_data, val, &mut stack_offset, &mut stack_map)
@@ -237,6 +243,25 @@ impl RiscVGenerator {
                 store_insts.push(store_in_stack_inst);
                 store_insts
             }
+            ValueKind::Branch(br) => {
+                let cond = br.cond();
+                let cond_data = function_data.dfg().value(cond);
+                let tb = br.true_bb();
+                let fb = br.false_bb();
+                let tb_name = function_data.dfg().bb(tb).name().as_ref().unwrap().clone().trim_start_matches(['@', '%']).to_owned();
+                let fb_name = function_data.dfg().bb(fb).name().as_ref().unwrap().clone().trim_start_matches(['@', '%']).to_owned();
+                let (mut insts, rg) = self.imm_to_register(&cond, cond_data, false, None, stack_map);
+                let jump_true_inst = Inst::BNez(rg, tb_name);
+                let jump_false_inst = Inst::J(fb_name);
+                insts.push(jump_true_inst);
+                insts.push(jump_false_inst);
+                insts
+            }
+            ValueKind::Jump(jp) => {
+                let tar = jp.target();
+                let tar_name = function_data.dfg().bb(tar).name().as_ref().unwrap().clone().trim_start_matches(['@', '%']).to_owned();
+                vec![Inst::J(tar_name)]
+            }
             _ => unreachable!(),
         }
     }
@@ -248,7 +273,7 @@ mod tests {
     use std::fs::read_to_string;
     #[test]
     fn aexp_sysy_2_riscv() {
-        let input = read_to_string("test/lv4/asgn.c").unwrap();
+        let input = read_to_string("test/lv6/0_if.c").unwrap();
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let mode = Mode::RiscV;
         mode.handle(

@@ -29,13 +29,29 @@ Block: Block = "{" <items: (<BlockItem>)*> "}" => Block { <> };
 BlockItem: BlockItem = {
   <stmt: Stmt> => BlockItem::Stmt(stmt),
   <decl: Decl> => BlockItem::Decl(decl),
-  <block: Block> => BlockItem::InnerBlock(block),
 };
 
 Stmt: Stmt = {
-  "return" <aexp: AExp> ";" => Stmt::Ret(aexp),
+  <m: MatchedStmt> => m,
+  <u: UnmatchedStmt> => u,
+};
+
+// 已经"完整"的语句:不会再吞掉后面的 else
+MatchedStmt: Stmt = {
+  "if" "(" <cond: AExp> ")" <then_branch: MatchedStmt> "else" <else_branch: MatchedStmt>
+      => Stmt::If(cond, Box::new(then_branch), Some(Box::new(else_branch))),
+  <block: Block> => Stmt::Block(block),
+  "return" <exp: AExp?> ";" => Stmt::Ret(exp),
   <asgn: Asgn> ";" => Stmt::Asgn(asgn),
   <exp: AExp?> ";" => Stmt::Exp(exp),
+};
+
+// 以未匹配的 if 结尾的语句:可以被外层的 else 收走
+UnmatchedStmt: Stmt = {
+  "if" "(" <cond: AExp> ")" <then_branch: Stmt>
+      => Stmt::If(cond, Box::new(then_branch), None),
+  "if" "(" <cond: AExp> ")" <then_branch: MatchedStmt> "else" <else_branch: UnmatchedStmt>
+      => Stmt::If(cond, Box::new(then_branch), Some(Box::new(else_branch))),
 };
 
 Number: i32 = <num: IntConst> => <>;

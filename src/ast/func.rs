@@ -23,12 +23,13 @@ pub struct Block {
 pub enum BlockItem {
     Stmt(Stmt),
     Decl(Decl),
-    InnerBlock(Block)
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Ret(AExp),
+    Ret(Option<AExp>),
     Asgn(Asgn),
     Exp(Option<AExp>),
+    Block(Block),
+    If(AExp, Box<Stmt>, Option<Box<Stmt>>),
 }

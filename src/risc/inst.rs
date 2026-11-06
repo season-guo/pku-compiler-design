@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Register {
     X0, //恒为0的寄存器
@@ -34,6 +36,8 @@ pub enum Inst {
     Lw(Register, Register, i32),
     Sw(Register, Register, i32),
     Addi(Register, Register, i32),
+    BNez(Register, String),
+    J(String),
     Ret,
 }
 
@@ -96,6 +100,8 @@ impl ToString for Inst {
             Self::Lw(rs, rd, imm) => format!("  lw {rs}, {imm}({rd})"),
             Self::Sw(rs2, rs1, imm) => format!("  sw {rs2}, {imm}({rs1})"),
             Self::Addi(rd, rs, imm) => format!("  addi {rd}, {rs}, {imm}"),
+            Self::BNez(rs, label) => format!("  bnez {rs}, {label}"),
+            Self::J(label) => format!("  j {label}"),
             Self::Ret => "  ret".to_string(),
         }
     }
