@@ -19,7 +19,7 @@ enum Symbol {
 
 pub struct KoopaGenerator {
     comp_unit: CompUnit,
-    block_name: i32, // 自增id
+    block_name: i32, // 自增id, 用于给 block 起名
 }
 
 impl KoopaGenerator {
@@ -82,7 +82,7 @@ impl KoopaGenerator {
     fn aexp_to_koopa_insts(
         self: &mut Self,
         function_data: &mut FunctionData,
-        block: &BasicBlock,
+        block: &mut BasicBlock,
         aexp: AExp,
         symbol_maps: &mut VecDeque<HashMap<String, Symbol>>
     ) -> Value {
@@ -117,30 +117,66 @@ impl KoopaGenerator {
                     ABinaryOp::Div => BinaryOp::Div,
                     ABinaryOp::And => {
                         let zero = new_value!(function_data).integer(0);
-                        let lhs = new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero);
-                        let rhs = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
-                        let _ = add_value!(function_data, *block, lhs);
-                        let _ = add_value!(function_data, *block, rhs);
-                        let expr = new_value!(function_data).binary(BinaryOp::And, lhs, rhs);
-                        let _ = add_value!(function_data, *block, expr);
-                        return expr;
+                        let one = new_value!(function_data).integer(1);
+
+                        let result_alloc = new_value!(function_data).alloc(Type::get_i32());
+                        let store_result = new_value!(function_data).store(zero, result_alloc);
+                        let _ = add_value!(function_data, *block, result_alloc);
+                        let _ = add_value!(function_data, *block, store_result);
+                        
+                        let cond = new_value!(function_data).binary(BinaryOp::Eq, lhs, zero);
+                        let true_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                        let false_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                        let end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                        let branch = new_value!(function_data).branch(cond, true_bb, false_bb);
+                        let false_val = new_value!(function_data).binary(BinaryOp::Eq, rhs, one);
+                        let store_result_if_false = new_value!(function_data).store(false_val, result_alloc);
+                        let load_result = new_value!(function_data).load(result_alloc);
+                        let _ = add_bb!(function_data, true_bb);
+                        let _ = add_bb!(function_data, false_bb);
+                        let _ = add_bb!(function_data, end_bb);
+                        let _ = add_value!(function_data, *block, cond);
+                        let _ = add_value!(function_data, *block, branch);
+                        let _ = add_value!(function_data, end_bb, load_result);
+                        let _ = add_value!(function_data, false_bb, false_val);
+                        let _ = add_value!(function_data, false_bb, store_result_if_false);
+                        
+                        let jump_val = new_value!(function_data).jump(end_bb);
+                        let _ = add_value!(function_data, true_bb, jump_val);
+                        let _ = add_value!(function_data, false_bb, jump_val);
+
+                        *block = end_bb;
+                        return load_result;                
                     }
                     ABinaryOp::Or => {
-                        // let result_val = new_value!(function_data).integer(1);
-                        // let cond = new_value!(function_data).binary(BinaryOp::Eq, lhs, result_val);
-                        // let true_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
-                        // let both_false_end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
-                        // let branch = new_value!(function_data).branch(cond, true_bb, both_false_end_bb);
-                        // let true_inst 
-
                         let zero = new_value!(function_data).integer(0);
-                        let lhs = new_value!(function_data).binary(BinaryOp::NotEq, lhs, zero);
-                        let rhs = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
-                        let _ = add_value!(function_data, *block, lhs);
-                        let _ = add_value!(function_data, *block, rhs);
-                        let expr = new_value!(function_data).binary(BinaryOp::Or, lhs, rhs);
-                        let _ = add_value!(function_data, *block, expr);
-                        return expr;
+
+                        let result_alloc = new_value!(function_data).alloc(Type::get_i32());
+                        let result_val = new_value!(function_data).integer(1);
+                        let store_result = new_value!(function_data).store(result_val, result_alloc);
+                        let _ = add_value!(function_data, *block, result_alloc);
+                        let _ = add_value!(function_data, *block, store_result);
+                        
+                        let cond = new_value!(function_data).binary(BinaryOp::Eq, lhs, zero);
+                        let true_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                        let both_false_end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                        let branch = new_value!(function_data).branch(cond, true_bb, both_false_end_bb);
+                        let true_val = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
+                        let store_result_if_true = new_value!(function_data).store(true_val, result_alloc);
+                        let load_result = new_value!(function_data).load(result_alloc);
+                        let _ = add_bb!(function_data, true_bb);
+                        let _ = add_bb!(function_data, both_false_end_bb);
+                        let _ = add_value!(function_data, *block, cond);
+                        let _ = add_value!(function_data, *block, branch);
+                        let _ = add_value!(function_data, both_false_end_bb, load_result);
+                        let _ = add_value!(function_data, true_bb, true_val);
+                        let _ = add_value!(function_data, true_bb, store_result_if_true);
+                        
+                        let jump_val = new_value!(function_data).jump(both_false_end_bb);
+                        let _ = add_value!(function_data, true_bb, jump_val);
+
+                        *block = both_false_end_bb;
+                        return load_result;
                     }
                     ABinaryOp::Eq => BinaryOp::Eq,
                     ABinaryOp::Neq => BinaryOp::NotEq,
@@ -217,7 +253,7 @@ impl KoopaGenerator {
                         symbol_maps.front_mut().unwrap().insert(ident.clone(), Symbol::Var(alloc));
                         let _ = add_value!(function_data, bb, alloc);
 
-                        let store_val = self.aexp_to_koopa_insts(function_data, &bb, val.clone(), symbol_maps);
+                        let store_val = self.aexp_to_koopa_insts(function_data, &mut bb, val.clone(), symbol_maps);
                         let store = new_value!(function_data).store(store_val, alloc);
                         let _ = add_value!(function_data, bb, store);
                     }
@@ -232,7 +268,7 @@ impl KoopaGenerator {
                 BlockItem::Stmt(Stmt::Ret(aexp)) => {
                     let ret = match aexp {
                         Some(aexp) => {
-                            let ret_value = self.aexp_to_koopa_insts(function_data, &bb, aexp, symbol_maps);
+                            let ret_value = self.aexp_to_koopa_insts(function_data, &mut bb, aexp, symbol_maps);
                             new_value!(function_data).ret(Some(ret_value))
                         }
                         None => new_value!(function_data).ret(None),
@@ -243,7 +279,7 @@ impl KoopaGenerator {
                 BlockItem::Stmt(Stmt::Asgn(Asgn { ident, val })) => {
                     let var = Self::find_symbol(symbol_maps, ident).unwrap().clone();
                     if let Symbol::Var(var) = var {
-                        let aexp_val = self.aexp_to_koopa_insts(function_data, &bb, val.clone(), symbol_maps);
+                        let aexp_val = self.aexp_to_koopa_insts(function_data, &mut bb, val.clone(), symbol_maps);
                         let store = new_value!(function_data).store(aexp_val, var);
 
                         let _ = add_value!(function_data, bb, store);
@@ -275,7 +311,7 @@ impl KoopaGenerator {
                         let jump_prev_end = new_value!(function_data).jump(prev);
                         let _ = add_value!(function_data, end_bb, jump_prev_end);
                     }
-                    let cond_val = self.aexp_to_koopa_insts(function_data, &bb, cond, symbol_maps);
+                    let cond_val = self.aexp_to_koopa_insts(function_data, &mut bb, cond, symbol_maps);
                     let br_inst = new_value!(function_data).branch(cond_val, then_bb, else_bb.unwrap_or_else(|| end_bb));
                     let _ = add_value!(function_data, bb, br_inst);
 
@@ -333,7 +369,7 @@ mod tests {
 
     #[test]
     fn aexp_sysy_2_koopa() {
-        let input = read_to_string("test/lv6/5_more_logical.c").unwrap();
+        let input = read_to_string("test/lv6/4_logical.c").unwrap();
         let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
         let builder = crate::koopa::koopa::KoopaGenerator::new(ast);
         let mode = Mode::Koopa;
