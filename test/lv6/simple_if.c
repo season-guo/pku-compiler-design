@@ -1,6 +1,7 @@
 int main() {
-  if ((1 && 2) || 1) {
-    1 + 1;
+  if (1) {
+    return 1;
+  } else { 
+    return 1;
   }
-  return 1;
 }

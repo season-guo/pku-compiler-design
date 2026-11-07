@@ -1,4 +1,4 @@
 int main() {
-  // 忽略我的存在
+  while (1) return 1;
   return 0;
 }

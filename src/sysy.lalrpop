@@ -44,6 +44,9 @@ MatchedStmt: Stmt = {
   "return" <exp: AExp?> ";" => Stmt::Ret(exp),
   <asgn: Asgn> ";" => Stmt::Asgn(asgn),
   <exp: AExp?> ";" => Stmt::Exp(exp),
+  "while" "(" <cond: AExp> ")" <inner_do: MatchedStmt> => Stmt::While(cond, Box::new(inner_do)),
+  "break" ";" => Stmt::Break,
+  "continue" ";" => Stmt::Continue,
 };
 
 // 以未匹配的 if 结尾的语句:可以被外层的 else 收走
@@ -52,6 +55,7 @@ UnmatchedStmt: Stmt = {
       => Stmt::If(cond, Box::new(then_branch), None),
   "if" "(" <cond: AExp> ")" <then_branch: MatchedStmt> "else" <else_branch: UnmatchedStmt>
       => Stmt::If(cond, Box::new(then_branch), Some(Box::new(else_branch))),
+  "while" "(" <cond: AExp> ")" <inner_do: UnmatchedStmt> => Stmt::While(cond, Box::new(inner_do)),
 };
 
 Number: i32 = <num: IntConst> => <>;

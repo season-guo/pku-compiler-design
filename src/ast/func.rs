@@ -32,4 +32,7 @@ pub enum Stmt {
     Exp(Option<AExp>),
     Block(Block),
     If(AExp, Box<Stmt>, Option<Box<Stmt>>),
+    While(AExp, Box<Stmt>),
+    Break,
+    Continue,
 }
