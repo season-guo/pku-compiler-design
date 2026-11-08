@@ -77,9 +77,9 @@ impl Register {
     }
 }
 
-impl ToString for Inst {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for Inst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             Self::Int(num) => num.to_string(),
             Self::Li(rd, imm) => format!("  li {}, {imm}", rd),
             Self::Mv(rd, rs) => format!("  mv {}, {}", rd, rs),
@@ -101,6 +101,7 @@ impl ToString for Inst {
             Self::BNez(rs, label) => format!("  bnez {rs}, {label}"),
             Self::J(label) => format!("  j {label}"),
             Self::Ret => "  ret".to_string(),
-        }
+        };
+        f.write_str(&s)
     }
 }

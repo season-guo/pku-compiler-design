@@ -269,7 +269,7 @@ impl RiscVGenerator {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Mode, koopa::koopa::KoopaGenerator, sysy};
+    use crate::{Mode, koopa::koopa_gen::KoopaGenerator, sysy};
     use std::fs::read_to_string;
     #[test]
     fn aexp_sysy_2_riscv() {
