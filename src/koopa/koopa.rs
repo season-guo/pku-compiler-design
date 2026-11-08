@@ -289,6 +289,7 @@ impl KoopaGenerator {
                 BlockItem::Stmt(Stmt::Exp(_exp)) => {
                     // 啥都不做，目前表达式没有副作用
                 }
+                // todo!:这里大量的clone搞得命名很混乱
                 BlockItem::Stmt(Stmt::If(cond, true_branch, false_branch)) => {
                     if let Stmt::Exp(None) = *true_branch {
                         if false_branch.is_none() {
