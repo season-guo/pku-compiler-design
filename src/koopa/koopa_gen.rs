@@ -95,32 +95,32 @@ impl KoopaGenerator {
     fn aexp_to_koopa_insts(
         self: &mut Self,
         function_data: &mut FunctionData,
-        block: &mut BasicBlock,
+        bb: BasicBlock,
         aexp: AExp,
-    ) -> Value {
+    ) -> (Value, BasicBlock) {
         match aexp {
-            AExp::ANum(num) => new_value!(function_data).integer(num),
+            AExp::ANum(num) => (new_value!(function_data).integer(num), bb),
             AExp::AUnAry(op, aexp) => {
-                let pre_value = self.aexp_to_koopa_insts(function_data, block, *aexp);
+                let (pre_value, bb) = self.aexp_to_koopa_insts(function_data, bb, *aexp);
                 match op {
-                    UnAryOp::Plus => pre_value,
+                    UnAryOp::Plus => (pre_value, bb),
                     UnAryOp::Minus => {
                         let lhs = new_value!(function_data).integer(0);
                         let val = new_value!(function_data).binary(BinaryOp::Sub, lhs, pre_value);
-                        let _ = add_value!(function_data, *block, val);
-                        val
+                        let _ = add_value!(function_data, bb, val);
+                        (pre_value, bb) 
                     }
                     UnAryOp::Not => {
                         let rhs = new_value!(function_data).integer(0);
                         let val = new_value!(function_data).binary(BinaryOp::Eq, pre_value, rhs);
-                        let _ = add_value!(function_data, *block, val);
-                        val
+                        let _ = add_value!(function_data, bb, val);
+                        (pre_value, bb)
                     }
                 }
             }
             AExp::ABinary(op, lhs, rhs) => {
-                let lhs = self.aexp_to_koopa_insts(function_data, block, *lhs);
-                let rhs = self.aexp_to_koopa_insts(function_data, block, *rhs);
+                let (lhs, bb) = self.aexp_to_koopa_insts(function_data, bb, *lhs);
+                let (rhs, bb) = self.aexp_to_koopa_insts(function_data, bb, *rhs);
                 let bin_op = match op {
                     ABinaryOp::Plus => BinaryOp::Add,
                     ABinaryOp::Minus => BinaryOp::Sub,
@@ -133,8 +133,8 @@ impl KoopaGenerator {
 
                         let result_alloc = new_value!(function_data).alloc(Type::get_i32());
                         let store_result = new_value!(function_data).store(zero, result_alloc);
-                        let _ = add_value!(function_data, *block, result_alloc);
-                        let _ = add_value!(function_data, *block, store_result);
+                        let _ = add_value!(function_data, bb, result_alloc);
+                        let _ = add_value!(function_data, bb, store_result);
                         
                         let cond = new_value!(function_data).binary(BinaryOp::Eq, lhs, zero);
                         let true_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
@@ -147,8 +147,8 @@ impl KoopaGenerator {
                         let _ = add_bb!(function_data, true_bb);
                         let _ = add_bb!(function_data, false_bb);
                         let _ = add_bb!(function_data, end_bb);
-                        let _ = add_value!(function_data, *block, cond);
-                        let _ = add_value!(function_data, *block, branch);
+                        let _ = add_value!(function_data, bb, cond);
+                        let _ = add_value!(function_data, bb, branch);
                         let _ = add_value!(function_data, end_bb, load_result);
                         let _ = add_value!(function_data, false_bb, false_val);
                         let _ = add_value!(function_data, false_bb, store_result_if_false);
@@ -157,8 +157,7 @@ impl KoopaGenerator {
                         let _ = add_value!(function_data, true_bb, jump_val);
                         let _ = add_value!(function_data, false_bb, jump_val);
 
-                        *block = end_bb;
-                        return load_result;                
+                        return (load_result, end_bb);                
                     }
                     ABinaryOp::Or => {
                         let zero = new_value!(function_data).integer(0);
@@ -166,8 +165,8 @@ impl KoopaGenerator {
                         let result_alloc = new_value!(function_data).alloc(Type::get_i32());
                         let result_val = new_value!(function_data).integer(1);
                         let store_result = new_value!(function_data).store(result_val, result_alloc);
-                        let _ = add_value!(function_data, *block, result_alloc);
-                        let _ = add_value!(function_data, *block, store_result);
+                        let _ = add_value!(function_data, bb, result_alloc);
+                        let _ = add_value!(function_data, bb, store_result);
                         
                         let cond = new_value!(function_data).binary(BinaryOp::Eq, lhs, zero);
                         let true_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
@@ -178,8 +177,8 @@ impl KoopaGenerator {
                         let load_result = new_value!(function_data).load(result_alloc);
                         let _ = add_bb!(function_data, true_bb);
                         let _ = add_bb!(function_data, both_false_end_bb);
-                        let _ = add_value!(function_data, *block, cond);
-                        let _ = add_value!(function_data, *block, branch);
+                        let _ = add_value!(function_data, bb, cond);
+                        let _ = add_value!(function_data, bb, branch);
                         let _ = add_value!(function_data, both_false_end_bb, load_result);
                         let _ = add_value!(function_data, true_bb, true_val);
                         let _ = add_value!(function_data, true_bb, store_result_if_true);
@@ -187,8 +186,7 @@ impl KoopaGenerator {
                         let jump_val = new_value!(function_data).jump(both_false_end_bb);
                         let _ = add_value!(function_data, true_bb, jump_val);
 
-                        *block = both_false_end_bb;
-                        return load_result;
+                        return (load_result, both_false_end_bb);
                     }
                     ABinaryOp::Eq => BinaryOp::Eq,
                     ABinaryOp::Neq => BinaryOp::NotEq,
@@ -199,17 +197,17 @@ impl KoopaGenerator {
                 };
 
                 let expr = new_value!(function_data).binary(bin_op, lhs, rhs);
-                let _ = add_value!(function_data, *block, expr);
-                expr
+                let _ = add_value!(function_data, bb, expr);
+                (expr, bb)
             }
             AExp::AVal(ident) => match self.find_symbol(ident) {
                 Some(Symbol::Const(exp)) => {
-                    self.aexp_to_koopa_insts(function_data, block, exp.clone())
+                    self.aexp_to_koopa_insts(function_data, bb, exp.clone())
                 }
                 Some(Symbol::Var(val)) => {
                     let expr = new_value!(function_data).load(*val);
-                    let _ = add_value!(function_data, *block, expr);
-                    expr
+                    let _ = add_value!(function_data, bb, expr);
+                    (expr, bb)
                 }
                 None => panic!("no such value"),
             },
@@ -225,8 +223,7 @@ impl KoopaGenerator {
             .and_then(|node| node.insts().back_key().copied())
             .map(|val| {
                 match function_data.dfg().value(val).kind() {
-                    ValueKind::Return(_) | ValueKind::Jump(_) => true,
-                    ValueKind::Branch(branch) => *bb != branch.true_bb() && *bb != branch.false_bb(),
+                    ValueKind::Return(_) | ValueKind::Jump(_) | ValueKind::Branch(_) => true,
                     _ => false,
                 }
             })
@@ -266,7 +263,7 @@ impl KoopaGenerator {
                         self.symbol_maps.front_mut().unwrap().insert(ident.clone(), Symbol::Var(alloc));
                         let _ = add_value!(function_data, bb, alloc);
 
-                        let store_val = self.aexp_to_koopa_insts(function_data, &mut bb, val.clone());
+                        let store_val; (store_val, bb) = self.aexp_to_koopa_insts(function_data, bb, val.clone());
                         let store = new_value!(function_data).store(store_val, alloc);
                         let _ = add_value!(function_data, bb, store);
                     }
@@ -281,8 +278,8 @@ impl KoopaGenerator {
                 BlockItem::Stmt(Stmt::Ret(aexp)) => {
                     let ret = match aexp {
                         Some(aexp) => {
-                            let ret_value = self.aexp_to_koopa_insts(function_data, &mut bb, aexp );
-                            new_value!(function_data).ret(Some(ret_value))
+                            let ret_val; (ret_val, bb) = self.aexp_to_koopa_insts(function_data, bb, aexp);
+                            new_value!(function_data).ret(Some(ret_val))
                         }
                         None => new_value!(function_data).ret(None),
                     };
@@ -292,7 +289,7 @@ impl KoopaGenerator {
                 BlockItem::Stmt(Stmt::Asgn(Asgn { ident, val })) => {
                     let var = self.find_symbol(ident).unwrap().clone();
                     if let Symbol::Var(var) = var {
-                        let aexp_val = self.aexp_to_koopa_insts(function_data, &mut bb, val.clone());
+                        let aexp_val; (aexp_val, bb) = self.aexp_to_koopa_insts(function_data, bb, val.clone());
                         let store = new_value!(function_data).store(aexp_val, var);
 
                         let _ = add_value!(function_data, bb, store);
@@ -332,7 +329,7 @@ impl KoopaGenerator {
                         end_bb
                     };
 
-                    let cond_val = self.aexp_to_koopa_insts(function_data, &mut bb, cond);
+                    let cond_val; (cond_val, bb) = self.aexp_to_koopa_insts(function_data, bb, cond);
                     let br_inst = new_value!(function_data).branch(cond_val, then_bb, else_bb.unwrap_or( end_bb));
                     let _ = add_value!(function_data, bb, br_inst);
 
@@ -364,12 +361,12 @@ impl KoopaGenerator {
                     bb = end_bb;
                 }
                 BlockItem::Stmt(Stmt::While(cond, do_stmt)) => {
-                    let mut cond_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
+                    let cond_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
                     let cond_bb_clone = cond_bb;
                     let _ = add_bb!(function_data, cond_bb);
                     let jump_cond_block = new_value!(function_data).jump(cond_bb);
                     let _ = add_value!(function_data, bb, jump_cond_block);
-                    let cond_val = self.aexp_to_koopa_insts(function_data, &mut cond_bb, cond);
+                    let (cond_val, cond_bb) = self.aexp_to_koopa_insts(function_data, cond_bb, cond);
 
                     let while_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
                     let end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
