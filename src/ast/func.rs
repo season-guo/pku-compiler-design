@@ -4,13 +4,14 @@ use crate::ast::r#type::Type;
 
 #[derive(Debug)]
 pub struct CompUnit {
-    pub func_def: FuncDef,
+    pub func_def: Vec<FuncDef>,
 }
 
 #[derive(Debug, Clone)]
 pub struct FuncDef {
     pub func_type: Type,
     pub ident: String,
+    pub params: Vec<(Type, String)>,
     pub block: Block,
 }
 

@@ -4,6 +4,7 @@ pub enum AExp {
     AVal(String),
     AUnAry(UnAryOp, Box<AExp>),
     ABinary(ABinaryOp, Box<AExp>, Box<AExp>),
+    AFunc(String, Vec<AExp>),
 }
 
 #[derive(Debug, Clone)]

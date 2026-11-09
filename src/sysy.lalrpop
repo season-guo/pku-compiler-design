@@ -15,15 +15,23 @@ match {
 
 // 定义 CompUnit, 其返回值类型为 String
 // parser 在解析完成后的行为是返回 FuncDef 的值
-pub CompUnit: CompUnit = <func_def: FuncDef> => CompUnit { <> };
+pub CompUnit: CompUnit = <func_def: FuncDef+> => CompUnit { <> };
 
 FuncDef: FuncDef = {
-  <func_type: Type> <ident: Ident> "(" ")" <block: Block> => {
-    FuncDef { <> }
-  }
+  <func_type: Type> <ident: Ident> "(" <fst: Param> <rest: ("," <Param>)*> ")" <block: Block> => {
+    let mut params = vec![fst];
+    params.extend(rest);
+    FuncDef {func_type, ident, params, block}
+  },
+  <func_type: Type> <ident: Ident> "(" ")" <block: Block> => FuncDef {func_type, ident, params: vec![], block},
 }
 
-Type: Type = "int" => Type::Int;
+Param: (Type, String) = <tp: Type> <ident: Ident> => (tp, ident);
+
+Type: Type = {
+  "int" => Type::Int,
+  "void" => Type::Void,
+}
 
 Block: Block = "{" <items: (<BlockItem>)*> "}" => Block { <> };
 BlockItem: BlockItem = {
@@ -63,7 +71,6 @@ Number: i32 = <num: IntConst> => <>;
 // 最低优先级在最外层, 每层只出现本层运算符
 AExp: AExp =  OrExp;
 
-// or and eq
 OrExp: AExp = {
   <lhs: OrExp> "||" <rhs: AndExp> => AExp::ABinary(ABinaryOp::Or, Box::new(lhs), Box::new(rhs)),
   <exp: AndExp> => exp,
@@ -115,6 +122,12 @@ PrimaryExp: AExp = {
   "(" <exp: AExp> ")" => exp,
   <num: IntConst> => AExp::ANum(num),
   <val: Ident> => AExp::AVal(val),
+  <func_name: Ident> "(" <fst: AExp> <rest: ("," <AExp>)*> ")" => {
+    let mut params = vec![fst];
+    params.extend(rest);
+    AExp::AFunc(func_name, params)
+  },
+  <func_name: Ident> "(" ")" => AExp::AFunc(func_name, vec![]),
 };
 
 UnaryOp: UnAryOp = {
