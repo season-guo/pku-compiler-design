@@ -129,7 +129,6 @@ impl KoopaGenerator {
                     ABinaryOp::Div => BinaryOp::Div,
                     ABinaryOp::And => {
                         let zero = new_value!(function_data).integer(0);
-                        let one = new_value!(function_data).integer(1);
 
                         let result_alloc = new_value!(function_data).alloc(Type::get_i32());
                         let store_result = new_value!(function_data).store(zero, result_alloc);
@@ -141,7 +140,7 @@ impl KoopaGenerator {
                         let false_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
                         let end_bb = new_bb!(function_data).basic_block(Some(self.make_block_name()));
                         let branch = new_value!(function_data).branch(cond, true_bb, false_bb);
-                        let false_val = new_value!(function_data).binary(BinaryOp::Eq, rhs, one);
+                        let false_val = new_value!(function_data).binary(BinaryOp::NotEq, rhs, zero);
                         let store_result_if_false = new_value!(function_data).store(false_val, result_alloc);
                         let load_result = new_value!(function_data).load(result_alloc);
                         let _ = add_bb!(function_data, true_bb);
